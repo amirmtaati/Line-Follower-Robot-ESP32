@@ -38,7 +38,7 @@ void setup()
   xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 2, NULL);
   xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 3, NULL);
   xTaskCreate(vRobotTask, "Main robot task", 4096, NULL, 1, NULL);
-  xTaskCreate(vDebugTask, "debug bro", 2048, NULL, 1, NULL);
+  xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 4, NULL);
 
   ledcSetup(BUZZER_CHANNEL, BUZZER_FREQ, BUZZER_RES);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);

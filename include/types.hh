@@ -1,46 +1,37 @@
-#ifndef TYPES_H
-#define TYPES_H
+// types.hh — declarations only
+#ifndef TYPES_HH
+#define TYPES_HH
 
 #include "config.hh"
 
-float IR_VALUES[N_SENSORS];
-float NORMALIZED_SENSOR_VALUES[N_SENSORS];
-
-float BLACK_VALUES[N_SENSORS];
-float WHITE_VALUES[N_SENSORS];
-
-enum class State {
-    STOPPED,
-    CALIBRATING,
-    MOVING
-};
+enum class State { STOPPED, CALIBRATING, MOVING };
 
 struct RobotState {
-    float error;
-    float last_error;
-    float correction;
-    float kP;
-    float base_speed;
+  float error;
+  float last_error;
+  float correction;
+  float kP;
+  float base_speed;
 };
 
+// Declare everything extern — defined in types.cpp
+extern float IR_VALUES[];
+extern float NORMALIZED_SENSOR_VALUES[];
+extern float BLACK_VALUES[];
+extern float WHITE_VALUES[];
+extern const float WEIGHTS[];
+
 extern RobotState robot;
-State state = State::STOPPED;
-static bool isCalibrated = false;
+extern State state;
+extern bool isCalibrated;
+extern bool ready;
+extern bool lastButtonState;
+extern TickType_t lastPressTime;
 
 extern SemaphoreHandle_t robotMutex;
 extern SemaphoreHandle_t btnSemaphore;
-
-const float WEIGHTS[N_SENSORS] = {-1.0f, -0.5f, 0.5f, 1.0f};
-
-QueueHandle_t irValuesQ;
-QueueHandle_t normalizedSensorValuesQ;
-
-SemaphoreHandle_t robotMutex;
-SemaphoreHandle_t btnSemaphore;
-
-RobotState robot = {};
-volatile bool ready = false;
-bool lastButtonState = HIGH;
-TickType_t lastPressTime = 0;
+extern QueueHandle_t irValuesQ;
+extern QueueHandle_t normalizedSensorValuesQ;
+extern float nv[];
 
 #endif

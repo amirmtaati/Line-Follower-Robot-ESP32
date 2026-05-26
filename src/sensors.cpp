@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "config.hh"
 #include "types.hh"
 #include "sensors.hh"
 
@@ -48,6 +47,7 @@ void vNormalizeSensorValuesTask(void *parameters)
       {
         float normalized_value = (ir_values[i] - white[i]) / (white[i] - black[i]);
         temp_normalized_sensor_values[i] = constrain(normalized_value, 0.0f, 1.0f);
+        nv[i] = temp_normalized_sensor_values[i];
       }
 
       xQueueSend(normalizedSensorValuesQ, &temp_normalized_sensor_values, portMAX_DELAY);

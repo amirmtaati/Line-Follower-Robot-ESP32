@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include "types.hh"
-#include "config.hh"
 #include "utils.hh"
 
 float getError(float* normalized) {

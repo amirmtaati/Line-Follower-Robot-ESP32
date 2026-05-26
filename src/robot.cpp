@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "config.hh"
 #include "types.hh"
 #include "motor.hh"
 #include "sensors.hh"
@@ -44,7 +43,7 @@ void vRobotTask(void *parameters)
       digitalWrite(G_LED, HIGH);
       digitalWrite(B_LED, LOW);
 
-      updateMotors(2000 * 4, 1.2000);
+//      updateMotors(2000 * 4, 2000);
 
       if (xQueueReceive(normalizedSensorValuesQ, &normalized, pdMS_TO_TICKS(10))) {
         robot.last_error = robot.error;
@@ -62,7 +61,7 @@ void vRobotTask(void *parameters)
           digitalWrite(R_LED, LOW);
         }
 
-       // updateMotors(left, right);
+        updateMotors(right, left);
       }
       break;
 
