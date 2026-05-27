@@ -15,8 +15,6 @@ struct RobotState {
 };
 
 // Declare everything extern — defined in types.cpp
-extern float IR_VALUES[];
-extern float NORMALIZED_SENSOR_VALUES[];
 extern float BLACK_VALUES[];
 extern float WHITE_VALUES[];
 extern const float WEIGHTS[];

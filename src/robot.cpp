@@ -43,24 +43,21 @@ void vRobotTask(void *parameters)
       digitalWrite(G_LED, HIGH);
       digitalWrite(B_LED, LOW);
 
-//      updateMotors(2000 * 4, 2000);
-
-      if (xQueueReceive(normalizedSensorValuesQ, &normalized, pdMS_TO_TICKS(10))) {
-        robot.last_error = robot.error;
-        robot.error = getError(normalized);
+      if (xQueueReceive(normalizedSensorValuesQ, &normalized, pdMS_TO_TICKS(10)))
+      {
         robot.kP = 1000;
-        robot.correction = robot.kP * robot.error;
+        float new_error = getError(normalized);
+        float new_correction = robot.kP * new_error;
+
+        xSemaphoreTake(robotMutex, portMAX_DELAY);
+        robot.last_error = robot.error;
+        robot.error = new_error;
+        robot.correction = new_correction;
         robot.base_speed = 2000;
-        
-        int left = robot.base_speed + (int)robot.correction;
-        int right = robot.base_speed - (int)robot.correction;
+        xSemaphoreGive(robotMutex);
 
-        if (robot.error == 0.0) {
-          digitalWrite(B_LED, HIGH);
-        } else {
-          digitalWrite(R_LED, LOW);
-        }
-
+        int left = robot.base_speed + (int)new_correction;
+        int right = robot.base_speed - (int)new_correction;
         updateMotors(right, left);
       }
       break;

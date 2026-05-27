@@ -23,11 +23,15 @@ static void writeMotor(int ch, int in1, int in2, int speed) {
     digitalWrite(in1, HIGH);
     digitalWrite(in2, LOW);
     ledcWrite(ch, speed);
-  } else {
+  } else if (speed < 0) {
     digitalWrite(in1, LOW);
     digitalWrite(in2, HIGH);
     ledcWrite(ch, -speed);
-  }
+  } else {
+        digitalWrite(in1, HIGH);
+        digitalWrite(in2, HIGH);
+        ledcWrite(ch, 0);
+    }
 }
 
 void updateMotors(int rightSpeed, int leftSpeed) {

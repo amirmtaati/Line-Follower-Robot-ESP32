@@ -34,11 +34,11 @@ void setup()
   irValuesQ = xQueueCreate(5, sizeof(float) * N_SENSORS);
   normalizedSensorValuesQ = xQueueCreate(5, sizeof(float) * N_SENSORS);
 
-  xTaskCreate(vReadSensorValuesTask, "Read IR sensors' values", 4096, NULL, 2, NULL);
-  xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 2, NULL);
-  xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 3, NULL);
-  xTaskCreate(vRobotTask, "Main robot task", 4096, NULL, 1, NULL);
-  xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 4, NULL);
+  xTaskCreate(vReadSensorValuesTask, "Read IR sensors' values", 4096, NULL, 3, NULL);
+  xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 3, NULL);
+  xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 2, NULL);
+  xTaskCreate(vRobotTask, "Main robot task", 8192, NULL, 2, NULL);
+  xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 1, NULL);
 
   ledcSetup(BUZZER_CHANNEL, BUZZER_FREQ, BUZZER_RES);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
@@ -47,6 +47,6 @@ void setup()
   ready = true;
 }
 
-void loop()
-{
+void loop() {
+
 }

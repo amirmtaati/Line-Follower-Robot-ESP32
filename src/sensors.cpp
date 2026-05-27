@@ -32,7 +32,7 @@ void vNormalizeSensorValuesTask(void *parameters)
     calibrated = isCalibrated;
     xSemaphoreGive(robotMutex);
 
-    if (xQueueReceive(irValuesQ, &ir_values, portMAX_DELAY) == pdTRUE && calibrated)
+    if (xQueueReceive(irValuesQ, &ir_values, portMAX_DELAY) == pdTRUE)
     {
       xSemaphoreTake(robotMutex, portMAX_DELAY);
 
@@ -43,9 +43,10 @@ void vNormalizeSensorValuesTask(void *parameters)
 
       xSemaphoreGive(robotMutex);
 
+      if (!calibrated) continue;
       for (int i = 0; i < N_SENSORS; i++)
       {
-        float normalized_value = (ir_values[i] - white[i]) / (white[i] - black[i]);
+        float normalized_value = (ir_values[i] - white[i]) / (black[i] - white[i]);
         temp_normalized_sensor_values[i] = constrain(normalized_value, 0.0f, 1.0f);
         nv[i] = temp_normalized_sensor_values[i];
       }
@@ -58,13 +59,16 @@ void vNormalizeSensorValuesTask(void *parameters)
 
 void calibrateSensorValues()
 {
+    float discard[N_SENSORS];
+    while (xQueueReceive(irValuesQ, discard, 0) == pdTRUE) {}
+
   TickType_t startTime;
   long whiteSum[N_SENSORS] = {0};
   long blackSum[N_SENSORS] = {0};
   int count = 0;
   float ir_values[N_SENSORS];
 
-  tone(BUZZER, 2000);
+  ledcWriteTone(BUZZER_CHANNEL, 2000);
   startTime = xTaskGetTickCount();
 
   while (xTaskGetTickCount() - startTime < pdMS_TO_TICKS(2000))
@@ -88,11 +92,11 @@ void calibrateSensorValues()
   }
   xSemaphoreGive(robotMutex);
 
-  noTone(BUZZER);
+  ledcWriteTone(BUZZER_CHANNEL, 0);
 
   vTaskDelay(pdMS_TO_TICKS(3000));
 
-  tone(BUZZER, 1000);
+  ledcWriteTone(BUZZER_CHANNEL, 1000);
   startTime = xTaskGetTickCount();
   count = 0;
 
@@ -118,4 +122,9 @@ void calibrateSensorValues()
   xSemaphoreGive(robotMutex);
 
   noTone(BUZZER);
+for (int i = 0; i < N_SENSORS; i++) {
+    Serial.printf("Sensor %d: white=%.1f  black=%.1f  range=%.1f\n",
+        i, WHITE_VALUES[i], BLACK_VALUES[i],
+        BLACK_VALUES[i] - WHITE_VALUES[i]);
+}
 }

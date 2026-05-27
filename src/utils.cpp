@@ -6,6 +6,10 @@ float getError(float* normalized) {
   float numerator   = 0;
   float denominator = 0;
   for (int i = 0; i < N_SENSORS; i++) {
+    if (isnan(normalized[i]) || normalized[i] < 0.0f || normalized[i] > 1.0f) {
+        continue;
+    }
+
     numerator   += WEIGHTS[i] * normalized[i];
     denominator += normalized[i];
   }

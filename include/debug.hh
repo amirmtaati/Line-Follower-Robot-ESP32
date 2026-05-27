@@ -1,10 +1,11 @@
-#ifndef DEBUG_H
-#define DEBUG_H
-
+#ifndef DEBUG_HH
+#define DEBUG_HH
 
 void vDebugTask(void* parameters);
-void printCalibrationValues();
 void printNormalizedSensorValues();
+void printCalibrationValues();
 void printControlParameters();
+void printMotorSpeeds();
+void printState();
 
 #endif
