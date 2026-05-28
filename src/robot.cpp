@@ -53,7 +53,7 @@ void vRobotTask(void *parameters)
         robot.last_error = robot.error;
         robot.error = new_error;
         robot.correction = new_correction;
-        robot.base_speed = 1500;
+        robot.base_speed = (analogRead(SPEED_POTEN) / 4095.0f) * 3000.0f;
         xSemaphoreGive(robotMutex);
 
         int left = robot.base_speed - (int)new_correction;
