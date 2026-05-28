@@ -24,11 +24,12 @@ extern const int B_LED;
 // Other
 extern const int BUZZER;
 extern const int BUTTON;
+extern const int POTEN;
 
 // LEDC channels — these are fine as #define, they're not variables
 #define BUZZER_CHANNEL  0
-#define MOTOR_A_CHANNEL 1
-#define MOTOR_B_CHANNEL 2
+#define MOTOR_A_CHANNEL 2
+#define MOTOR_B_CHANNEL 4
 #define PWM_FREQ        5000
 #define PWM_RES         12
 #define BUZZER_FREQ     2000

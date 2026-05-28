@@ -3,7 +3,7 @@
 
 float BLACK_VALUES[4]               = {0};
 float WHITE_VALUES[4]               = {0};
-const float WEIGHTS[4]              = {-1.0f, -0.5f, 0.5f, 1.0f};
+const float WEIGHTS[4]              = {-3.0f, -0.5f, 0.5f, 3.0f};
 float nv[4] = {0};
 
 RobotState robot                    = {};

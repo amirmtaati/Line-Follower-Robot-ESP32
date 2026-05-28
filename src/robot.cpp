@@ -45,7 +45,7 @@ void vRobotTask(void *parameters)
 
       if (xQueueReceive(normalizedSensorValuesQ, &normalized, pdMS_TO_TICKS(10)))
       {
-        robot.kP = 1000;
+        robot.kP = getKp();
         float new_error = getError(normalized);
         float new_correction = robot.kP * new_error;
 
@@ -53,11 +53,11 @@ void vRobotTask(void *parameters)
         robot.last_error = robot.error;
         robot.error = new_error;
         robot.correction = new_correction;
-        robot.base_speed = 2000;
+        robot.base_speed = 1500;
         xSemaphoreGive(robotMutex);
 
-        int left = robot.base_speed + (int)new_correction;
-        int right = robot.base_speed - (int)new_correction;
+        int left = robot.base_speed - (int)new_correction;
+        int right = robot.base_speed + (int)new_correction;
         updateMotors(right, left);
       }
       break;

@@ -20,6 +20,10 @@ float getError(float* normalized) {
   return numerator / denominator;
 }
 
+float getKp() {
+  return (analogRead(POTEN) / 4095.0f) * 2000.0f;
+}
+
 void vButtonTask(void *parameters)
 {
   while (true)

@@ -52,7 +52,7 @@ void vNormalizeSensorValuesTask(void *parameters)
       }
 
       xQueueSend(normalizedSensorValuesQ, &temp_normalized_sensor_values, portMAX_DELAY);
-      vTaskDelay(pdMS_TO_TICKS(5));
+    //  vTaskDelay(pdMS_TO_TICKS(5));
     }
   }
 }
