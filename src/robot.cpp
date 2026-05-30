@@ -7,7 +7,8 @@
 
 void vRobotTask(void *parameters)
 {
-  while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
+  while (!ready)
+    vTaskDelay(pdMS_TO_TICKS(10));
   float normalized[N_SENSORS];
   State localState;
 
@@ -76,8 +77,8 @@ void vRobotTask(void *parameters)
         int right = constrain((int)(baseSpeed + new_correction), -3200, 3200);
 
         xSemaphoreTake(robotMutex, portMAX_DELAY);
-        robot.last_error = new_error;
-        robot.error = new_error;
+        robot.last_error = robot.error; 
+        robot.error = new_error;        
         robot.correction = new_correction;
         robot.left_pwm = left;
         robot.right_pwm = right;

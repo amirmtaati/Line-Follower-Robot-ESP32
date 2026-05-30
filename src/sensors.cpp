@@ -21,48 +21,67 @@ void vReadSensorValuesTask(void *parameters)
 
 void vNormalizeSensorValuesTask(void *parameters)
 {
-  while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
-  float temp_normalized_sensor_values[N_SENSORS];
+  while (!ready)
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+  float temp_normalized[N_SENSORS];
   float ir_values[N_SENSORS];
-  bool calibrated;
 
   while (true)
   {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
-    calibrated = isCalibrated;
+    bool calibrating = isCalibrating;
+    bool calibrated = isCalibrated;
     xSemaphoreGive(robotMutex);
-
-    if (xQueueReceive(irValuesQ, &ir_values, portMAX_DELAY) == pdTRUE)
+    if (calibrating)
     {
-      xSemaphoreTake(robotMutex, portMAX_DELAY);
+      vTaskDelay(pdMS_TO_TICKS(5));
+      continue;
+    }
 
+    if (xQueueReceive(irValuesQ, ir_values, portMAX_DELAY) == pdTRUE)
+    {
+      if (!calibrated)
+        continue;
+      xSemaphoreTake(robotMutex, portMAX_DELAY);
+      bool calibrated = isCalibrated;
       float white[N_SENSORS];
       float black[N_SENSORS];
       memcpy(white, WHITE_VALUES, sizeof(white));
       memcpy(black, BLACK_VALUES, sizeof(black));
-
       xSemaphoreGive(robotMutex);
 
-      if (!calibrated) continue;
+      if (!calibrated)
+        continue;
+
       for (int i = 0; i < N_SENSORS; i++)
       {
         float range = black[i] - white[i];
-        float normalized_value = fabsf(range) > 1.0f ? (ir_values[i] - white[i]) / range : 0.0f;
-        temp_normalized_sensor_values[i] = constrain(normalized_value, 0.0f, 1.0f);
+        if (fabsf(range) < 10.0f)
+        {
+          temp_normalized[i] = 0.0f;
+          continue;
+        }
+        temp_normalized[i] = constrain(
+            (ir_values[i] - white[i]) / range,
+            0.0f, 1.0f);
       }
 
-    xSemaphoreTake(robotMutex, portMAX_DELAY);
-    memcpy(nv, temp_normalized_sensor_values, sizeof(float) * N_SENSORS);
-    xSemaphoreGive(robotMutex);
+      xSemaphoreTake(robotMutex, portMAX_DELAY);
+      memcpy(nv, temp_normalized, sizeof(float) * N_SENSORS);
+      xSemaphoreGive(robotMutex);
 
-    xQueueOverwrite(normalizedSensorValuesQ, temp_normalized_sensor_values);
-    //  vTaskDelay(pdMS_TO_TICKS(5));
+      xQueueOverwrite(normalizedSensorValuesQ, temp_normalized);
     }
   }
 }
 
 void calibrateSensorValues()
 {
+    xSemaphoreTake(robotMutex, portMAX_DELAY);
+    isCalibrating = true;
+    xSemaphoreGive(robotMutex);
+
     float discard[N_SENSORS];
     while (xQueueReceive(irValuesQ, discard, 0) == pdTRUE) {}
 
@@ -126,6 +145,11 @@ void calibrateSensorValues()
   xSemaphoreGive(robotMutex);
 
   noTone(BUZZER);
+
+     xSemaphoreTake(robotMutex, portMAX_DELAY);
+    isCalibrating = false;
+    xSemaphoreGive(robotMutex);
+
 for (int i = 0; i < N_SENSORS; i++) {
     Serial.printf("Sensor %d: white=%.1f  black=%.1f  range=%.1f\n",
         i, WHITE_VALUES[i], BLACK_VALUES[i],

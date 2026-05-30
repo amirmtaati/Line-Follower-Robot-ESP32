@@ -240,24 +240,27 @@ static void buildTelemetryJson(char* json, size_t len) {
     xSemaphoreGive(robotMutex);
 
     snprintf(json, len,
-        "{\"state\":\"%s\","
-        "\"error\":%.4f,"
-        "\"correction\":%.2f,"
-        "\"kp\":%.1f,"
-        "\"kd\":%.1f,"
-        "\"base_speed\":%.1f,"
-        "\"left_pwm\":%d,"
-        "\"right_pwm\":%d,"
-        "\"calibrated\":%s,"
-        "\"ir\":[%.3f,%.3f,%.3f,%.3f]}",
-        stateToString(s),
-        jsonFloat(r.error), jsonFloat(r.correction),
-        jsonFloat(r.kP), jsonFloat(r.kD),
-        jsonFloat(r.base_speed),
-        r.left_pwm, r.right_pwm,
-        calibrated ? "true" : "false",
-        jsonFloat(ir[0]), jsonFloat(ir[1]), jsonFloat(ir[2]), jsonFloat(ir[3])
-    );
+             "{\"state\":\"%s\","
+             "\"error\":%.4f,"
+             "\"correction\":%.2f,"
+             "\"kp\":%.1f,"
+             "\"kd\":%.1f,"
+             "\"base_speed\":%.1f,"
+             "\"left_pwm\":%d,"
+             "\"right_pwm\":%d,"
+             "\"calibrated\":%s,"
+             "\"white\":[%.1f,%.1f,%.1f,%.1f]," // add this
+             "\"black\":[%.1f,%.1f,%.1f,%.1f]," // add this
+             "\"ir\":[%.3f,%.3f,%.3f,%.3f]}",
+             stateToString(s),
+             jsonFloat(r.error), jsonFloat(r.correction),
+             jsonFloat(r.kP), jsonFloat(r.kD),
+             jsonFloat(r.base_speed),
+             r.left_pwm, r.right_pwm,
+             calibrated ? "true" : "false",
+             WHITE_VALUES[0], WHITE_VALUES[1], WHITE_VALUES[2], WHITE_VALUES[3],
+             BLACK_VALUES[0], BLACK_VALUES[1], BLACK_VALUES[2], BLACK_VALUES[3],
+             jsonFloat(ir[0]), jsonFloat(ir[1]), jsonFloat(ir[2]), jsonFloat(ir[3]));
 }
 
 static void handleData(AsyncWebServerRequest* request) {

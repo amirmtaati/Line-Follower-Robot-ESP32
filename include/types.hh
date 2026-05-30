@@ -29,6 +29,7 @@ extern bool startAfterCalibration;
 extern bool ready;
 extern bool lastButtonState;
 extern TickType_t lastPressTime;
+extern bool isCalibrating;
 
 extern SemaphoreHandle_t robotMutex;
 extern SemaphoreHandle_t btnSemaphore;

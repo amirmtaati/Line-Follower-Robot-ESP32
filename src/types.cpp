@@ -11,6 +11,7 @@ State state                         = State::STOPPED;
 bool isCalibrated                   = false;
 bool startAfterCalibration          = false;
 bool ready                          = false;
+bool isCalibrating = false;
 bool lastButtonState                = HIGH;
 TickType_t lastPressTime            = 0;
 
