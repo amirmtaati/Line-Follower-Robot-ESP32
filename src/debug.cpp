@@ -59,9 +59,7 @@ void printControlParameters() {
 
 void printMotorSpeeds() {
     RobotState r = snapshotRobot();
-    int left  = r.base_speed + (int)r.correction;
-    int right = r.base_speed - (int)r.correction;
-    Serial.printf("L: %5d  R: %5d\n", left, right);
+    Serial.printf("L: %5d  R: %5d\n", r.left_pwm, r.right_pwm);
 }
 
 void printState() {

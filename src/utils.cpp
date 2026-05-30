@@ -14,7 +14,10 @@ float getError(float* normalized) {
     denominator += normalized[i];
   }
   if (denominator == 0) {
-    return robot.last_error;
+    xSemaphoreTake(robotMutex, portMAX_DELAY);
+    float lastError = robot.last_error;
+    xSemaphoreGive(robotMutex);
+    return isfinite(lastError) ? lastError : 0.0f;
   }
 
   return numerator / denominator;
@@ -26,6 +29,8 @@ float getKp() {
 
 void vButtonTask(void *parameters)
 {
+  while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
+
   while (true)
   {
     bool currentState = digitalRead(BUTTON);
@@ -47,6 +52,7 @@ void vButtonTask(void *parameters)
         if (calibrated == false)
         {
           xSemaphoreTake(robotMutex, portMAX_DELAY);
+          startAfterCalibration = false;
           state = State::CALIBRATING;
           xSemaphoreGive(robotMutex);
         }
@@ -60,16 +66,11 @@ void vButtonTask(void *parameters)
         break;
 
       case State::CALIBRATING:
-        if (calibrated)
-        {
-          xSemaphoreTake(robotMutex, portMAX_DELAY);
-          state = State::MOVING;
-          xSemaphoreGive(robotMutex);
-        }
         break;
 
       case State::MOVING:
         xSemaphoreTake(robotMutex, portMAX_DELAY);
+        startAfterCalibration = false;
         state = State::STOPPED;
         xSemaphoreGive(robotMutex);
         break;

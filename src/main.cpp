@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include "config.hh"
 #include "types.hh"
 #include "motor.hh"
@@ -12,10 +11,6 @@
 void setup()
 {
   Serial.begin(115200);
-  delay(1000);  // let ESP32 fully boot before touching anything
-
-  WiFi.mode(WIFI_OFF);
-  delay(100);
 
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
@@ -44,13 +39,14 @@ void setup()
   xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 3, NULL);
   xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 2, NULL);
   xTaskCreate(vRobotTask, "Main robot task", 8192, NULL, 2, NULL);
+  xTaskCreate(vTelemetryTask, "Web telemetry", 4096, NULL, 1, NULL);
   // xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 1, NULL);
-  xTaskCreate(vWiFiTask, "WiFi server", 8192, NULL, 1, NULL);
 
   ledcSetup(BUZZER_CHANNEL, BUZZER_FREQ, BUZZER_RES);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
   setupMotors();
 
+  startWiFiServer();
   ready = true;
 }
 

@@ -1,6 +1,8 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include <ESPAsyncWebServer.h>
+#include <esp_event.h>
+#include <esp_netif.h>
+#include <esp_wifi.h>
 #include "types.hh"
 #include "wifi.hh"
 
@@ -9,6 +11,18 @@ static const char* SSID     = "Our Lovely Home";
 static const char* PASSWORD = "amir85THEfallenAngel76";
 
 static AsyncWebServer server(80);
+static AsyncEventSource events("/events");
+static esp_netif_t* staNetif = nullptr;
+static EventGroupHandle_t wifiEventGroup = nullptr;
+static int wifiRetryCount = 0;
+
+static constexpr int WIFI_CONNECTED_BIT = BIT0;
+static constexpr int WIFI_FAIL_BIT = BIT1;
+static constexpr int MAX_WIFI_RETRIES = 20;
+
+static void setWiFiLed(bool connected) {
+    digitalWrite(B_LED, connected ? HIGH : LOW);
+}
 
 // ── HTML page — served once when browser connects ─────────
 // Embedded directly in the binary, no SD card needed
@@ -30,6 +44,7 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
     button.red { background: #a00; }
     .value { color: #ff0; font-weight: bold; }
     #state { font-size: 1.4em; }
+    #link { color: #888; }
   </style>
 </head>
 <body>
@@ -45,6 +60,8 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div>Base Speed: <span class="value" id="speed">-</span></div>
     <div>L PWM: <span class="value" id="lpwm">-</span></div>
     <div>R PWM: <span class="value" id="rpwm">-</span></div>
+    <div>Calibrated: <span class="value" id="calibrated">-</span></div>
+    <div>Link: <span id="link">-</span></div>
   </div>
 
   <!-- Sensor values -->
@@ -66,42 +83,132 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
   <!-- Robot control -->
   <div class="card">
-    <button onclick="fetch('/start')">START</button>
-    <button class="red" onclick="fetch('/stop')">STOP</button>
-    <button onclick="fetch('/calibrate')">CALIBRATE</button>
+    <button onclick="sendCommand('/start')">START</button>
+    <button class="red" onclick="sendCommand('/stop')">STOP</button>
+    <button onclick="sendCommand('/calibrate')">CALIBRATE</button>
   </div>
 
 <script>
-  // Poll live data every 200ms
-  function updateData() {
-    fetch('/data')
-      .then(r => r.json())
-      .then(d => {
-        document.getElementById('state').textContent      = d.state;
-        document.getElementById('error').textContent      = d.error.toFixed(3);
-        document.getElementById('correction').textContent = d.correction.toFixed(1);
-        document.getElementById('kp').textContent         = d.kp.toFixed(0);
-        document.getElementById('kd').textContent         = d.kd.toFixed(0);
-        document.getElementById('speed').textContent      = d.base_speed.toFixed(0);
-        document.getElementById('lpwm').textContent       = d.left_pwm;
-        document.getElementById('rpwm').textContent       = d.right_pwm;
-        document.getElementById('ir0').textContent        = d.ir[0].toFixed(3);
-        document.getElementById('ir1').textContent        = d.ir[1].toFixed(3);
-        document.getElementById('ir2').textContent        = d.ir[2].toFixed(3);
-        document.getElementById('ir3').textContent        = d.ir[3].toFixed(3);
-      })
-      .catch(() => {});
+  var inputs = {
+    kp: document.getElementById('kp_in'),
+    kd: document.getElementById('kd_in'),
+    speed: document.getElementById('speed_in')
+  };
+  var editing = false;
+  var dirtyParams = false;
+  var lastEventMs = 0;
+  var pollTimer = null;
+
+  inputs.kp.onfocus = inputs.kd.onfocus = inputs.speed.onfocus = function() { editing = true; };
+  inputs.kp.onblur = inputs.kd.onblur = inputs.speed.onblur = function() { editing = false; };
+  inputs.kp.oninput = inputs.kd.oninput = inputs.speed.oninput = function() { dirtyParams = true; };
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function syncInputs(d) {
+    if (editing || dirtyParams) return;
+    inputs.kp.value = d.kp.toFixed(0);
+    inputs.kd.value = d.kd.toFixed(0);
+    inputs.speed.value = d.base_speed.toFixed(0);
+  }
+
+  function renderData(d, source) {
+    lastEventMs = Date.now();
+    setText('state', d.state);
+    setText('error', Number(d.error).toFixed(3));
+    setText('correction', Number(d.correction).toFixed(1));
+    setText('kp', Number(d.kp).toFixed(0));
+    setText('kd', Number(d.kd).toFixed(0));
+    setText('speed', Number(d.base_speed).toFixed(0));
+    setText('lpwm', d.left_pwm);
+    setText('rpwm', d.right_pwm);
+    setText('calibrated', d.calibrated ? 'YES' : 'NO');
+    setText('ir0', Number(d.ir[0]).toFixed(3));
+    setText('ir1', Number(d.ir[1]).toFixed(3));
+    setText('ir2', Number(d.ir[2]).toFixed(3));
+    setText('ir3', Number(d.ir[3]).toFixed(3));
+    setText('link', source + ' ' + new Date().toLocaleTimeString());
+    syncInputs(d);
+  }
+
+  function requestText(path, ok) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', path, true);
+    xhr.timeout = 1500;
+    xhr.setRequestHeader('Cache-Control', 'no-cache');
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        ok(xhr.responseText);
+      } else {
+        setText('link', 'HTTP ' + xhr.status + ' ' + new Date().toLocaleTimeString());
+      }
+    };
+    xhr.onerror = function() {
+      setText('link', 'network error ' + new Date().toLocaleTimeString());
+    };
+    xhr.ontimeout = function() {
+      setText('link', 'timeout ' + new Date().toLocaleTimeString());
+    };
+    xhr.send();
+  }
+
+  function fetchData() {
+    requestText('/data', function(text) {
+      try {
+        renderData(JSON.parse(text), 'poll');
+      } catch (e) {
+        setText('link', 'bad JSON: ' + text.slice(0, 32));
+      }
+    });
   }
 
   function sendParams() {
-    const kp    = document.getElementById('kp_in').value;
-    const kd    = document.getElementById('kd_in').value;
-    const speed = document.getElementById('speed_in').value;
-    fetch(`/set?kp=${kp}&kd=${kd}&speed=${speed}`);
+    var kp = encodeURIComponent(inputs.kp.value);
+    var kd = encodeURIComponent(inputs.kd.value);
+    var speed = encodeURIComponent(inputs.speed.value);
+    requestText('/set?kp=' + kp + '&kd=' + kd + '&speed=' + speed, function(text) {
+      try {
+        dirtyParams = false;
+        renderData(JSON.parse(text), 'set');
+      } catch (e) {
+        fetchData();
+      }
+    });
   }
 
-  setInterval(updateData, 200);
-  updateData();
+  function sendCommand(path) {
+    requestText(path, function() { fetchData(); });
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(fetchData, 500);
+  }
+
+  function startEvents() {
+    if (!window.EventSource) {
+      startPolling();
+      return;
+    }
+
+    var stream = new EventSource('/events');
+    stream.addEventListener('telemetry', function(event) {
+      renderData(JSON.parse(event.data), 'stream');
+    });
+    stream.onerror = function() {
+      setText('link', 'reconnecting ' + new Date().toLocaleTimeString());
+      startPolling();
+    };
+
+    setInterval(function() {
+      if (Date.now() - lastEventMs > 1500) startPolling();
+    }, 1000);
+  }
+
+  fetchData();
+  startEvents();
 </script>
 </body>
 </html>
@@ -109,27 +216,30 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
 // ── HTTP handlers ─────────────────────────────────────────
 
-static void handleData(AsyncWebServerRequest* request) {
-    // Snapshot all state under mutex — same pattern as debug task
+static const char* stateToString(State s) {
+    switch (s) {
+        case State::STOPPED:     return "STOPPED";
+        case State::CALIBRATING: return "CALIBRATING";
+        case State::MOVING:      return "MOVING";
+    }
+
+    return "UNKNOWN";
+}
+
+static float jsonFloat(float value) {
+    return isfinite(value) ? value : 0.0f;
+}
+
+static void buildTelemetryJson(char* json, size_t len) {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
     RobotState r  = robot;
     State      s  = state;
+    bool calibrated = isCalibrated;
     float      ir[N_SENSORS];
     memcpy(ir, nv, sizeof(float) * N_SENSORS);
-    int lpwm = (int)(r.base_speed - r.correction);
-    int rpwm = (int)(r.base_speed + r.correction);
     xSemaphoreGive(robotMutex);
 
-    const char* stateStr = "UNKNOWN";
-    switch (s) {
-        case State::STOPPED:     stateStr = "STOPPED";     break;
-        case State::CALIBRATING: stateStr = "CALIBRATING"; break;
-        case State::MOVING:      stateStr = "MOVING";      break;
-    }
-
-    // Build JSON response
-    char json[512];
-    snprintf(json, sizeof(json),
+    snprintf(json, len,
         "{\"state\":\"%s\","
         "\"error\":%.4f,"
         "\"correction\":%.2f,"
@@ -138,95 +248,287 @@ static void handleData(AsyncWebServerRequest* request) {
         "\"base_speed\":%.1f,"
         "\"left_pwm\":%d,"
         "\"right_pwm\":%d,"
+        "\"calibrated\":%s,"
         "\"ir\":[%.3f,%.3f,%.3f,%.3f]}",
-        stateStr,
-        r.error, r.correction,
-        r.kP, r.kD,
-        r.base_speed,
-        lpwm, rpwm,
-        ir[0], ir[1], ir[2], ir[3]
+        stateToString(s),
+        jsonFloat(r.error), jsonFloat(r.correction),
+        jsonFloat(r.kP), jsonFloat(r.kD),
+        jsonFloat(r.base_speed),
+        r.left_pwm, r.right_pwm,
+        calibrated ? "true" : "false",
+        jsonFloat(ir[0]), jsonFloat(ir[1]), jsonFloat(ir[2]), jsonFloat(ir[3])
     );
+}
 
-    request->send(200, "application/json", json);
+static void handleData(AsyncWebServerRequest* request) {
+    char json[512];
+    buildTelemetryJson(json, sizeof(json));
+
+    AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+    response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    response->addHeader("Pragma", "no-cache");
+    request->send(response);
+}
+
+static void handlePing(AsyncWebServerRequest* request) {
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/plain", "pong");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
 }
 
 static void handleSet(AsyncWebServerRequest* request) {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
 
     if (request->hasParam("kp"))
-        robot.kP = request->getParam("kp")->value().toFloat();
+        robot.kP = constrain(request->getParam("kp")->value().toFloat(), 0.0f, 5000.0f);
     if (request->hasParam("kd"))
-        robot.kD = request->getParam("kd")->value().toFloat();
+        robot.kD = constrain(request->getParam("kd")->value().toFloat(), 0.0f, 5000.0f);
     if (request->hasParam("speed"))
-        robot.base_speed = request->getParam("speed")->value().toFloat();
+        robot.base_speed = constrain(request->getParam("speed")->value().toFloat(), 0.0f, 3200.0f);
 
     xSemaphoreGive(robotMutex);
-    request->send(200, "text/plain", "OK");
+
+    char json[512];
+    buildTelemetryJson(json, sizeof(json));
+    AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+    response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    response->addHeader("Pragma", "no-cache");
+    request->send(response);
 }
 
 static void handleStart(AsyncWebServerRequest* request) {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
-    if (state == State::STOPPED)
-        state = isCalibrated ? State::MOVING : State::CALIBRATING;
+    if (state == State::STOPPED) {
+        if (isCalibrated) {
+            state = State::MOVING;
+        } else {
+            startAfterCalibration = false;
+            state = State::CALIBRATING;
+        }
+    }
     xSemaphoreGive(robotMutex);
-    request->send(200, "text/plain", "OK");
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/plain", "OK");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
 }
 
 static void handleStop(AsyncWebServerRequest* request) {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
     state = State::STOPPED;
+    startAfterCalibration = false;
+    robot.left_pwm = 0;
+    robot.right_pwm = 0;
     xSemaphoreGive(robotMutex);
-    request->send(200, "text/plain", "OK");
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/plain", "OK");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
 }
 
 static void handleCalibrate(AsyncWebServerRequest* request) {
     xSemaphoreTake(robotMutex, portMAX_DELAY);
     state = State::CALIBRATING;
+    isCalibrated = false;
+    startAfterCalibration = false;
+    robot.error = 0.0f;
+    robot.last_error = 0.0f;
+    robot.correction = 0.0f;
+    robot.left_pwm = 0;
+    robot.right_pwm = 0;
     xSemaphoreGive(robotMutex);
-    request->send(200, "text/plain", "OK");
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/plain", "OK");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
 }
 
 // ── WiFi task ─────────────────────────────────────────────
 
-void vWiFiTask(void* parameters) {
-    while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    WiFi.mode(WIFI_STA);
-    vTaskDelay(pdMS_TO_TICKS(100));  // let mode set before begin
-    WiFi.begin(SSID, PASSWORD);
-
-    Serial.print("Connecting to WiFi");
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        Serial.print(".");
-        attempts++;
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("\nWiFi failed — running without web server");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    Serial.printf("\nConnected — open http://%s\n",
-        WiFi.localIP().toString().c_str());
+static void setupRoutes() {
+    static bool routesConfigured = false;
+    if (routesConfigured) return;
 
     server.on("/",          HTTP_GET, [](AsyncWebServerRequest* r){
-        r->send_P(200, "text/html", INDEX_HTML);
+        AsyncWebServerResponse* response = r->beginResponse_P(200, "text/html", INDEX_HTML);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        r->send(response);
     });
     server.on("/data",      HTTP_GET, handleData);
+    server.on("/ping",      HTTP_GET, handlePing);
     server.on("/set",       HTTP_GET, handleSet);
     server.on("/start",     HTTP_GET, handleStart);
     server.on("/stop",      HTTP_GET, handleStop);
     server.on("/calibrate", HTTP_GET, handleCalibrate);
+    events.onConnect([](AsyncEventSourceClient* client) {
+        char json[512];
+        buildTelemetryJson(json, sizeof(json));
+        client->send(json, "telemetry", millis(), 1000);
+    });
+    server.addHandler(&events);
 
+    routesConfigured = true;
+}
+
+static bool checkEsp(esp_err_t err, const char* action) {
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) return true;
+
+    Serial.printf("%s failed: %s (%d)\n", action, esp_err_to_name(err), err);
+    return false;
+}
+
+static void wifiEventHandler(void* arg, esp_event_base_t eventBase, int32_t eventId, void* eventData) {
+    if (eventBase == WIFI_EVENT && eventId == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+        return;
+    }
+
+    if (eventBase == WIFI_EVENT && eventId == WIFI_EVENT_STA_DISCONNECTED) {
+        setWiFiLed(false);
+        if (wifiRetryCount < MAX_WIFI_RETRIES) {
+            wifiRetryCount++;
+            esp_wifi_connect();
+        } else {
+            xEventGroupSetBits(wifiEventGroup, WIFI_FAIL_BIT);
+        }
+        return;
+    }
+
+    if (eventBase == IP_EVENT && eventId == IP_EVENT_STA_GOT_IP) {
+        wifiRetryCount = 0;
+        setWiFiLed(true);
+        xEventGroupSetBits(wifiEventGroup, WIFI_CONNECTED_BIT);
+    }
+}
+
+bool startWiFiServer() {
+    static bool wifiStarted = false;
+    if (wifiStarted) return true;
+
+    setWiFiLed(false);
+
+    wifiEventGroup = xEventGroupCreate();
+    if (wifiEventGroup == nullptr) {
+        Serial.println("WiFi event group allocation failed - web server disabled");
+        return false;
+    }
+
+    if (!checkEsp(esp_netif_init(), "esp_netif_init")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_event_loop_create_default(), "esp_event_loop_create_default")) {
+        return false;
+    }
+
+    staNetif = esp_netif_create_default_wifi_sta();
+    if (staNetif == nullptr) {
+        Serial.println("esp_netif_create_default_wifi_sta failed - web server disabled");
+        return false;
+    }
+
+    esp_netif_set_hostname(staNetif, "line-follower");
+
+    wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
+    config.nvs_enable = false;
+
+    if (!checkEsp(esp_wifi_init(&config), "esp_wifi_init")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifiEventHandler, nullptr, nullptr),
+                  "register WIFI_EVENT handler")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifiEventHandler, nullptr, nullptr),
+                  "register IP_EVENT handler")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_wifi_set_storage(WIFI_STORAGE_RAM), "esp_wifi_set_storage")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_wifi_set_mode(WIFI_MODE_STA), "esp_wifi_set_mode")) {
+        return false;
+    }
+
+    wifi_config_t wifiConfig = {};
+    strlcpy(reinterpret_cast<char*>(wifiConfig.sta.ssid), SSID, sizeof(wifiConfig.sta.ssid));
+    strlcpy(reinterpret_cast<char*>(wifiConfig.sta.password), PASSWORD, sizeof(wifiConfig.sta.password));
+    wifiConfig.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+
+    if (!checkEsp(esp_wifi_set_config(WIFI_IF_STA, &wifiConfig), "esp_wifi_set_config")) {
+        return false;
+    }
+
+    if (!checkEsp(esp_wifi_set_ps(WIFI_PS_NONE), "esp_wifi_set_ps")) {
+        return false;
+    }
+
+    wifiRetryCount = 0;
+    xEventGroupClearBits(wifiEventGroup, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+
+    Serial.print("Connecting to WiFi");
+
+    if (!checkEsp(esp_wifi_start(), "esp_wifi_start")) {
+        return false;
+    }
+
+    EventBits_t bits = 0;
+    while ((bits & (WIFI_CONNECTED_BIT | WIFI_FAIL_BIT)) == 0) {
+        bits = xEventGroupWaitBits(
+            wifiEventGroup,
+            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+            pdFALSE,
+            pdFALSE,
+            pdMS_TO_TICKS(500)
+        );
+        vTaskDelay(pdMS_TO_TICKS(500));
+        Serial.print(".");
+    }
+
+    if (bits & WIFI_FAIL_BIT) {
+        Serial.println("\nWiFi failed - running without web server");
+        setWiFiLed(false);
+        esp_wifi_stop();
+        return false;
+    }
+
+    esp_netif_ip_info_t ipInfo;
+    if (!checkEsp(esp_netif_get_ip_info(staNetif, &ipInfo), "esp_netif_get_ip_info")) {
+        return false;
+    }
+
+    IPAddress ip(ipInfo.ip.addr);
+    Serial.printf("\nConnected — open http://%s\n", ip.toString().c_str());
+
+    setupRoutes();
     server.begin();
     Serial.println("Web server started");
+    setWiFiLed(true);
+    wifiStarted = true;
+    return true;
+}
+
+void vWiFiTask(void* parameters) {
+    while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
+
+    startWiFiServer();
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+void vTelemetryTask(void* parameters) {
+    while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
+
+    char json[512];
+    while (true) {
+        if (events.count() > 0) {
+            buildTelemetryJson(json, sizeof(json));
+            events.send(json, "telemetry", millis());
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }

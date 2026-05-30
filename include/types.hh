@@ -13,6 +13,8 @@ struct RobotState {
   float kP;
   float kD;
   float base_speed;
+  int left_pwm;
+  int right_pwm;
 };
 
 // Declare everything extern — defined in types.cpp
@@ -23,6 +25,7 @@ extern const float WEIGHTS[];
 extern RobotState robot;
 extern State state;
 extern bool isCalibrated;
+extern bool startAfterCalibration;
 extern bool ready;
 extern bool lastButtonState;
 extern TickType_t lastPressTime;

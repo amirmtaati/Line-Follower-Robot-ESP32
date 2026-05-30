@@ -46,10 +46,14 @@ void vNormalizeSensorValuesTask(void *parameters)
       if (!calibrated) continue;
       for (int i = 0; i < N_SENSORS; i++)
       {
-        float normalized_value = (ir_values[i] - white[i]) / (black[i] - white[i]);
+        float range = black[i] - white[i];
+        float normalized_value = fabsf(range) > 1.0f ? (ir_values[i] - white[i]) / range : 0.0f;
         temp_normalized_sensor_values[i] = constrain(normalized_value, 0.0f, 1.0f);
-        nv[i] = temp_normalized_sensor_values[i];
       }
+
+    xSemaphoreTake(robotMutex, portMAX_DELAY);
+    memcpy(nv, temp_normalized_sensor_values, sizeof(float) * N_SENSORS);
+    xSemaphoreGive(robotMutex);
 
     xQueueOverwrite(normalizedSensorValuesQ, temp_normalized_sensor_values);
     //  vTaskDelay(pdMS_TO_TICKS(5));
