@@ -14,8 +14,8 @@ void vReadSensorValuesTask(void *parameters)
       temp_ir_values[i] = analogRead(IR_SENSORS[i]);
     }
 
-    xQueueSend(irValuesQ, &temp_ir_values, portMAX_DELAY);
-    vTaskDelay(pdMS_TO_TICKS(5));
+    xQueueOverwrite(irValuesQ, temp_ir_values);
+    vTaskDelay(pdMS_TO_TICKS(2));
   }
 }
 
@@ -51,7 +51,7 @@ void vNormalizeSensorValuesTask(void *parameters)
         nv[i] = temp_normalized_sensor_values[i];
       }
 
-      xQueueSend(normalizedSensorValuesQ, &temp_normalized_sensor_values, portMAX_DELAY);
+    xQueueOverwrite(normalizedSensorValuesQ, temp_normalized_sensor_values);
     //  vTaskDelay(pdMS_TO_TICKS(5));
     }
   }

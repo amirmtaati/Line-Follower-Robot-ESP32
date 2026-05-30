@@ -21,7 +21,7 @@ const int B_LED = 22;
 // Other
 const int BUZZER = 21;
 const int BUTTON = 15;
-const int POTEN = 4;
-const int SPEED_POTEN = 13;
+//const int POTEN = 4;
+//const int SPEED_POTEN = 13;
 
 TickType_t DEBOUNCE_TIME = pdMS_TO_TICKS(50);

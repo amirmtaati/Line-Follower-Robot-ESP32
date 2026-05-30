@@ -11,6 +11,7 @@ struct RobotState {
   float last_error;
   float correction;
   float kP;
+  float kD;
   float base_speed;
 };
 

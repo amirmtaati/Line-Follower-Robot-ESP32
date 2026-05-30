@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 #include "config.hh"
 #include "types.hh"
 #include "motor.hh"
@@ -6,11 +7,13 @@
 #include "utils.hh"
 #include "robot.hh"
 #include "debug.hh"
+#include "wifi.hh"
 
 void setup()
 {
   Serial.begin(115200);
 
+  WiFi.begin("Our Lovely Home", "amir85THEfallenAngel76");
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
   pinMode(BIN1, OUTPUT);
@@ -31,14 +34,15 @@ void setup()
   robotMutex = xSemaphoreCreateMutex();
   btnSemaphore = xSemaphoreCreateBinary();
 
-  irValuesQ = xQueueCreate(5, sizeof(float) * N_SENSORS);
-  normalizedSensorValuesQ = xQueueCreate(5, sizeof(float) * N_SENSORS);
+  irValuesQ = xQueueCreate(1, sizeof(float) * N_SENSORS);
+  normalizedSensorValuesQ = xQueueCreate(1, sizeof(float) * N_SENSORS);
 
   xTaskCreate(vReadSensorValuesTask, "Read IR sensors' values", 4096, NULL, 3, NULL);
   xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 3, NULL);
   xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 2, NULL);
   xTaskCreate(vRobotTask, "Main robot task", 8192, NULL, 2, NULL);
-  xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 1, NULL);
+  // xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 1, NULL);
+  xTaskCreate(vWiFiTask, "WiFi server", 8192, NULL, 1, NULL);
 
   ledcSetup(BUZZER_CHANNEL, BUZZER_FREQ, BUZZER_RES);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
@@ -47,6 +51,20 @@ void setup()
   ready = true;
 }
 
-void loop() {
+// void setup() {
+//   WiFi.mode(WIFI_STA);
+//    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+// WiFi.setHostname("esp32");
+//   WiFi.begin("Our Lovely Home", "amir85THEfallenAngel76");
+//   Serial.print("Connecting...");
+//   while (WiFi.status() != WL_CONNECTED) {
+//     Serial.print('.');
+//     delay(1000);
+//   }
+//   Serial.println(WiFi.localIP());
 
+// }
+
+void loop()
+{
 }
