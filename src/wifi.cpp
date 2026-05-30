@@ -190,20 +190,16 @@ static void handleCalibrate(AsyncWebServerRequest* request) {
 
 void vWiFiTask(void* parameters) {
     while (!ready) vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
-    //WiFi.begin(SSID, PASSWORD);
     WiFi.mode(WIFI_STA);
-delay(500);
+    vTaskDelay(pdMS_TO_TICKS(100));  // let mode set before begin
+    WiFi.begin(SSID, PASSWORD);
 
-WiFi.setHostname("line-follower");
-
-delay(500);
-
-WiFi.begin(SSID, PASSWORD);
     Serial.print("Connecting to WiFi");
 
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
         vTaskDelay(pdMS_TO_TICKS(500));
         Serial.print(".");
         attempts++;
@@ -211,26 +207,26 @@ WiFi.begin(SSID, PASSWORD);
 
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("\nWiFi failed — running without web server");
-        vTaskDelete(NULL);  // kill this task, robot still works
+        vTaskDelete(NULL);
         return;
     }
 
-    Serial.printf("\nWiFi connected — open http://%s\n",
+    Serial.printf("\nConnected — open http://%s\n",
         WiFi.localIP().toString().c_str());
 
-    // Register routes
-    server.on("/",         HTTP_GET, [](AsyncWebServerRequest* r){ r->send_P(200, "text/html", INDEX_HTML); });
-    server.on("/data",     HTTP_GET, handleData);
-    server.on("/set",      HTTP_GET, handleSet);
-    server.on("/start",    HTTP_GET, handleStart);
-    server.on("/stop",     HTTP_GET, handleStop);
-    server.on("/calibrate",HTTP_GET, handleCalibrate);
+    server.on("/",          HTTP_GET, [](AsyncWebServerRequest* r){
+        r->send_P(200, "text/html", INDEX_HTML);
+    });
+    server.on("/data",      HTTP_GET, handleData);
+    server.on("/set",       HTTP_GET, handleSet);
+    server.on("/start",     HTTP_GET, handleStart);
+    server.on("/stop",      HTTP_GET, handleStop);
+    server.on("/calibrate", HTTP_GET, handleCalibrate);
 
     server.begin();
     Serial.println("Web server started");
 
-    // Task stays alive — server runs in background via ESPAsyncWebServer
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1000));  // nothing to do, server is async
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

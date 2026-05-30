@@ -12,8 +12,11 @@
 void setup()
 {
   Serial.begin(115200);
+  delay(1000);  // let ESP32 fully boot before touching anything
 
-  WiFi.begin("Our Lovely Home", "amir85THEfallenAngel76");
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
   pinMode(BIN1, OUTPUT);
@@ -51,18 +54,19 @@ void setup()
   ready = true;
 }
 
-// void setup() {
+// void setup()
+// {
 //   WiFi.mode(WIFI_STA);
-//    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-// WiFi.setHostname("esp32");
+//   WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+//   WiFi.setHostname("esp32");
 //   WiFi.begin("Our Lovely Home", "amir85THEfallenAngel76");
 //   Serial.print("Connecting...");
-//   while (WiFi.status() != WL_CONNECTED) {
+//   while (WiFi.status() != WL_CONNECTED)
+//   {
 //     Serial.print('.');
 //     delay(1000);
 //   }
 //   Serial.println(WiFi.localIP());
-
 // }
 
 void loop()
