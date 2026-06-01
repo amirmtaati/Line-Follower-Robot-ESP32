@@ -39,6 +39,7 @@ void setup()
   xTaskCreate(vNormalizeSensorValuesTask, "Normalize IR sensors' values", 4096, NULL, 3, NULL);
   xTaskCreate(vButtonTask, "Check for button being pressed", 2048, NULL, 2, NULL);
   xTaskCreate(vRobotTask, "Main robot task", 8192, NULL, 2, NULL);
+  xTaskCreate(vWiFiTask, "WiFi", 8192, NULL, 1, NULL);
   xTaskCreate(vTelemetryTask, "Web telemetry", 4096, NULL, 1, NULL);
   // xTaskCreate(vDebugTask, "debug bro", 4096, NULL, 1, NULL);
 
@@ -46,24 +47,8 @@ void setup()
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
   setupMotors();
 
-  startWiFiServer();
   ready = true;
 }
-
-// void setup()
-// {
-//   WiFi.mode(WIFI_STA);
-//   WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-//   WiFi.setHostname("esp32");
-//   WiFi.begin("Our Lovely Home", "amir85THEfallenAngel76");
-//   Serial.print("Connecting...");
-//   while (WiFi.status() != WL_CONNECTED)
-//   {
-//     Serial.print('.');
-//     delay(1000);
-//   }
-//   Serial.println(WiFi.localIP());
-// }
 
 void loop()
 {
